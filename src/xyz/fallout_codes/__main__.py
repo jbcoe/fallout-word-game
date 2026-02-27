@@ -1,97 +1,16 @@
 """The entry point for the fallout-codes package."""
 
 import argparse
-import jax
-
+import sys
 from jax import random
 import jax.numpy as jnp
 
 from xyz.fallout_codes.words import _SAMPLE_WORDS
-
-_NON_ALPHABETIC_CHARACTERS = jnp.array(
-    [ord(c) for c in "!@#$%^&*()_+-=[]{}|;':\",.<>/?`~"]
-)
+from xyz.fallout_codes.grid import build_grid_lines
 
 
-def non_alphabetic_characters(length: int, key: jax.Array) -> list[str]:
-    """Returns a list of non-alphabetic character codes of the specified length."""
-    ordinals = random.choice(
-        key,
-        a=_NON_ALPHABETIC_CHARACTERS,
-        shape=(length,),
-        replace=True,
-    ).tolist()
-    return [chr(c) for c in ordinals]
-
-
-def build_grid_text(length: int, words: list[str], key: jax.Array) -> list[str]:
-    text_key, key_words, place_key = random.split(key, 3)
-    text = non_alphabetic_characters(length, text_key)
-
-    # This algorithm works by defining `word_count + 1` blocks of padding
-    # (before, between, and after words). The total space not used by words is
-    # randomly distributed among these padding blocks, ensuring at least one
-    # character of padding between words.
-
-    # 1. Calculate how much space is available for padding.
-    total_word_len = sum(len(word) for word in words)
-    total_padding_space = length - total_word_len
-    min_internal_padding = max(0, len(words) - 1)
-    extra_padding = total_padding_space - min_internal_padding
-
-    if extra_padding < 0:
-        raise ValueError(
-            f"Text of length {length} is too short to contain {len(words)} "
-            "words with the required spacing."
-        )
-
-    # 2. Randomly distribute extra padding among the (word_count + 1) blocks.
-    key, subkey = random.split(place_key)
-    partitions = jnp.sort(
-        random.randint(subkey, shape=(len(words),), minval=0, maxval=extra_padding + 1)
-    )
-    all_partitions = jnp.concatenate(
-        [jnp.array([0]), partitions, jnp.array([extra_padding])]
-    )
-    extra_pads = jnp.diff(all_partitions)
-
-    # 3. Determine the final size of each padding block.
-    base_pads = jnp.zeros(len(words) + 1, dtype=jnp.int32)
-    if len(words) > 1:
-        # Add the minimum 1-char space for internal padding blocks.
-        base_pads = base_pads.at[1:-1].set(1)
-    padding_sizes = base_pads + extra_pads
-
-    # 4. Calculate word start indices from the padding sizes.
-    cumulative_padding_before_word = jnp.cumsum(padding_sizes)[:-1]
-    word_offsets = jnp.array([len(word) for word in words])
-    start_indices = (
-        cumulative_padding_before_word + jnp.cumsum(word_offsets) - word_offsets
-    )
-
-    # 5. Place the chosen words at the calculated start indices.
-    for word, start in zip(words, start_indices.tolist()):
-        text[start : start + len(word)] = list(word)
-
-    return text
-
-
-def build_grid_lines(
-    width: int,
-    height: int,
-    words: list[str],
-    key: jax.Array,
-) -> list[str]:
-    """Builds a grid of words and non-alphabetic characters."""
-    text = build_grid_text(width * height, words=words, key=key)
-
-    # Split the text into lines of the specified width.
-    lines = ["".join(text[i : i + width]) for i in range(0, len(text), width)]
-    return lines
-
-
-def main() -> None:
-    """Parses command-line arguments and runs the grid generator."""
+def parse_args() -> argparse.Namespace:
+    """Parses command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Generate a Fallout-style code-breaking grid."
     )
@@ -128,7 +47,27 @@ def main() -> None:
     parser.add_argument(
         "--height", type=int, default=16, help="Height of the character grid."
     )
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def load_words(word_file: str | None) -> list[str]:
+    """Loads a list of words from a file, or returns the default list."""
+    if word_file:
+        with open(word_file, "r") as f:
+            words = [line.strip().upper() for line in f if line.strip()]
+        return words
+
+    return _SAMPLE_WORDS
+
+
+def filter_words(all_words: list[str], word_length: int) -> list[str]:
+    """Filters words by length and removes duplicates."""
+    return sorted(list(set([w for w in all_words if len(w) == word_length])))
+
+
+def main() -> None:
+    """Runs the grid generator."""
+    args = parse_args()
 
     if args.word_length <= 0:
         raise ValueError("Error: Word length must be a positive integer.")
@@ -139,46 +78,45 @@ def main() -> None:
     if args.word_count <= 0:
         raise ValueError("Error: Word count must be a positive integer.")
 
-    if args.word_file:
-        with open(args.word_file, "r") as f:
-            all_words = [line.strip().upper() for line in f if line.strip()]
-    else:
-        all_words = _SAMPLE_WORDS
+    all_words = load_words(args.word_file)
 
-    if not all_words:
-        raise ValueError("Error: Word list is empty.")
+    filtered_words = filter_words(all_words, args.word_length)
 
-    # Determine word length from the first word and filter the list for consistency.
-    # Also remove duplicates.
-    all_words = sorted(list(set([w for w in all_words if len(w) == args.word_length])))
-
-    if len(all_words) < args.word_count * args.grid_count:
-        raise ValueError(
+    required_word_count = args.word_count * args.grid_count
+    if len(filtered_words) < required_word_count:
+        print(
             f"Error: Not enough unique words of length {args.word_length} available. "
-            f"Found {len(all_words)}, but need {args.word_count * args.grid_count}."
+            f"Found {len(filtered_words)}, but need {required_word_count}.",
+            file=sys.stderr,
         )
+        sys.exit(1)
 
     key = random.PRNGKey(args.seed)
 
     words_key, *grid_keys = random.split(key, args.grid_count + 1)
-    # 0. Randomly select `word_count` words from the list without replacement.
+
+    # Randomly select words without replacement
     chosen_word_indices = random.choice(
         words_key,
-        jnp.arange(len(all_words)),
-        shape=(args.grid_count * args.word_count,),
+        jnp.arange(len(filtered_words)),
+        shape=(required_word_count,),
         replace=False,
     )
-    chosen_words = [all_words[i] for i in chosen_word_indices]
+    chosen_words = [filtered_words[i] for i in chosen_word_indices]
 
     grids: list[list[str]] = []
     for i, grid_key in enumerate(grid_keys):
+        # Slice the chosen words for this specific grid
+        grid_words = chosen_words[i :: args.grid_count]
+
         grid = build_grid_lines(
             width=args.width,
             height=args.height,
-            words=chosen_words[i :: args.grid_count],
+            words=grid_words,
             key=grid_key,
         )
         grids.append(grid)
+
     screen_lines = []
     for grid_lines in zip(*grids):
         screen_lines.append(" | ".join(grid_lines))
