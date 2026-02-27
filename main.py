@@ -1,13 +1,16 @@
 """The entry point for the fallout-codes package."""
 
+from jax.lax import le
+
 import argparse
 import sys
+import jax
 
 from jax import random
 import jax.numpy as jnp
 
 
-def non_alphabetic_characters(length: int, key: random.PRNGKey) -> list[str]:
+def non_alphabetic_characters(length: int, key: jax.Array) -> list[str]:
     """Returns a list of non-alphabetic character codes of the specified length."""
     ordinals = random.choice(
         key,
@@ -23,25 +26,9 @@ def split_into_lines(text: list[str], width: int) -> list[str]:
     return ["".join(text[i : i + width]) for i in range(0, len(text), width)]
 
 
-def run(
-    width: int,
-    height: int,
-    word_count: int,
-    word_length: int,
-    all_words: list[str],
-    key: random.PRNGKey,
-) -> None:
-    """The main logic for generating and printing the grid."""
-    key_a, key_b, key_words, key_place = random.split(key, 4)
-
-    text_a = non_alphabetic_characters(width * height, key_a)
-    text_b = non_alphabetic_characters(width * height, key_b)
-
-    # 0. Randomly select `word_count` words from the list without replacement.
-    chosen_word_indices = random.choice(
-        key_words, jnp.arange(len(all_words)), shape=(word_count,), replace=False
-    )
-    chosen_words = [all_words[i] for i in chosen_word_indices]
+def grid_text(length: int, words: list[str], key: jax.Array) -> list[str]:
+    key_text, key_words, key_place = random.split(key, 3)
+    text = non_alphabetic_characters(length, key_text)
 
     # This algorithm works by defining `word_count + 1` blocks of padding
     # (before, between, and after words). The total space not used by words is
@@ -49,23 +36,21 @@ def run(
     # character of padding between words.
 
     # 1. Calculate how much space is available for padding.
-    total_word_len = word_count * word_length
-    total_padding_space = (width * height) - total_word_len
-    min_internal_padding = max(0, word_count - 1)
+    total_word_len = sum(len(word) for word in words)
+    total_padding_space = length - total_word_len
+    min_internal_padding = max(0, len(words) - 1)
     extra_padding = total_padding_space - min_internal_padding
 
     if extra_padding < 0:
         raise ValueError(
-            f"Text of length {width * height} is too short to contain {word_count} "
-            f"words of length {word_length} with required spacing."
+            f"Text of length {length} is too short to contain {len(words)} "
+            "words with the required spacing."
         )
 
     # 2. Randomly distribute extra padding among the (word_count + 1) blocks.
     key, subkey = random.split(key_place)
     partitions = jnp.sort(
-        random.randint(
-            subkey, shape=(word_count,), minval=0, maxval=extra_padding + 1
-        )
+        random.randint(subkey, shape=(len(words),), minval=0, maxval=extra_padding + 1)
     )
     all_partitions = jnp.concatenate(
         [jnp.array([0]), partitions, jnp.array([extra_padding])]
@@ -73,27 +58,51 @@ def run(
     extra_pads = jnp.diff(all_partitions)
 
     # 3. Determine the final size of each padding block.
-    base_pads = jnp.zeros(word_count + 1, dtype=jnp.int32)
-    if word_count > 1:
+    base_pads = jnp.zeros(len(words) + 1, dtype=jnp.int32)
+    if len(words) > 1:
         # Add the minimum 1-char space for internal padding blocks.
         base_pads = base_pads.at[1:-1].set(1)
     padding_sizes = base_pads + extra_pads
 
     # 4. Calculate word start indices from the padding sizes.
     cumulative_padding_before_word = jnp.cumsum(padding_sizes)[:-1]
-    word_offsets = jnp.arange(word_count) * word_length
-    start_indices = cumulative_padding_before_word + word_offsets
+    word_offsets = jnp.array([len(word) for word in words])
+    start_indices = (
+        cumulative_padding_before_word + jnp.cumsum(word_offsets) - word_offsets
+    )
 
     # 5. Place the chosen words at the calculated start indices.
-    for word, start in zip(chosen_words, start_indices.tolist()):
-        text_a[start : start + word_length] = list(word)
+    for word, start in zip(words, start_indices.tolist()):
+        text[start : start + len(word)] = list(word)
+
+    return text
+
+
+def grid_lines(
+    width: int,
+    height: int,
+    word_count: int,
+    word_length: int,
+    all_words: list[str],
+    key: jax.Array,
+) -> list[str]:
+    """Builds a grid of words and non-alphabetic characters."""
+    key_text, key_words, key_place = random.split(key, 3)
+
+    # 0. Randomly select `word_count` words from the list without replacement.
+    chosen_word_indices = random.choice(
+        key_words, jnp.arange(len(all_words)), shape=(word_count,), replace=False
+    )
+    chosen_words = [all_words[i] for i in chosen_word_indices]
+
+    text = grid_text(width * height, chosen_words, key_text)
 
     # Split the text into lines of the specified width.
-    lines_a = split_into_lines(text_a, width)
-    lines_b = split_into_lines(text_b, width)
+    lines = split_into_lines(text, width)
 
+    return lines
     # Print the lines.
-    print("\n".join(f"| {a} | {b} |" for a, b in zip(lines_a, lines_b)))
+    # print("\n".join(f"| {a} | {b} |" for a, b in zip(lines_a, lines_a)))
 
 
 def main() -> None:
@@ -133,22 +142,118 @@ def main() -> None:
             sys.exit(1)
     else:
         all_words = [
-            "ABOUT", "ABOVE", "ABUSE", "ACTOR", "ACUTE", "ADMIT", "ADOPT",
-            "ADULT", "AFTER", "AGAIN", "AGENT", "AGREE", "AHEAD", "ALARM",
-            "ALBUM", "ALERT", "ALIKE", "ALIVE", "ALLOW", "ALONE", "ALONG",
-            "ALTER", "AMONG", "ANGER", "ANGLE", "ANGRY", "APART", "APPLE",
-            "APPLY", "ARENA", "ARGUE", "ARISE", "ARRAY", "ASIDE", "ASSET",
-            "AUDIO", "AUDIT", "AVOID", "AWARD", "AWARE", "BADLY", "BAKER",
-            "BASES", "BASIC", "BASIS", "BEACH", "BEGAN", "BEGIN", "BEGUN",
-            "BEING", "BELOW", "BENCH", "BILLY", "BIRTH", "BLACK", "BLAME",
-            "BLIND", "BLOCK", "BLOOD", "BOARD", "BRAIN", "BREAD", "BRUSH",
-            "CHAIR", "CHARM", "CHEST", "CHORD", "CLICK", "CLOCK", "CLOUD",
-            "CODES", "DANCE", "DEBUG", "DIARY", "DRINK", "EARTH", "FLUTE",
-            "FRUIT", "GHOST", "GRAPE", "GREEN", "HAPPY", "HEART", "HOUSE",
-            "INDEX", "INPUT", "JAXON", "JUICE", "LIGHT", "LOGIC", "MACRO",
-            "MONEY", "MUSIC", "OTHER", "PARTY", "PIXEL", "PIZZA", "PLANT",
-            "PROXY", "QUAKE", "QUERY", "RADIO", "RIVER", "SALAD", "SHEEP",
-            "SHOES", "SMILE", "SNACK", "SNAKE", "SOLVE", "SPICE", "SPOON",
+            "ABOUT",
+            "ABOVE",
+            "ABUSE",
+            "ACTOR",
+            "ACUTE",
+            "ADMIT",
+            "ADOPT",
+            "ADULT",
+            "AFTER",
+            "AGAIN",
+            "AGENT",
+            "AGREE",
+            "AHEAD",
+            "ALARM",
+            "ALBUM",
+            "ALERT",
+            "ALIKE",
+            "ALIVE",
+            "ALLOW",
+            "ALONE",
+            "ALONG",
+            "ALTER",
+            "AMONG",
+            "ANGER",
+            "ANGLE",
+            "ANGRY",
+            "APART",
+            "APPLE",
+            "APPLY",
+            "ARENA",
+            "ARGUE",
+            "ARISE",
+            "ARRAY",
+            "ASIDE",
+            "ASSET",
+            "AUDIO",
+            "AUDIT",
+            "AVOID",
+            "AWARD",
+            "AWARE",
+            "BADLY",
+            "BAKER",
+            "BASES",
+            "BASIC",
+            "BASIS",
+            "BEACH",
+            "BEGAN",
+            "BEGIN",
+            "BEGUN",
+            "BEING",
+            "BELOW",
+            "BENCH",
+            "BILLY",
+            "BIRTH",
+            "BLACK",
+            "BLAME",
+            "BLIND",
+            "BLOCK",
+            "BLOOD",
+            "BOARD",
+            "BRAIN",
+            "BREAD",
+            "BRUSH",
+            "CHAIR",
+            "CHARM",
+            "CHEST",
+            "CHORD",
+            "CLICK",
+            "CLOCK",
+            "CLOUD",
+            "CODES",
+            "DANCE",
+            "DEBUG",
+            "DIARY",
+            "DRINK",
+            "EARTH",
+            "FLUTE",
+            "FRUIT",
+            "GHOST",
+            "GRAPE",
+            "GREEN",
+            "HAPPY",
+            "HEART",
+            "HOUSE",
+            "INDEX",
+            "INPUT",
+            "JAXON",
+            "JUICE",
+            "LIGHT",
+            "LOGIC",
+            "MACRO",
+            "MONEY",
+            "MUSIC",
+            "OTHER",
+            "PARTY",
+            "PIXEL",
+            "PIZZA",
+            "PLANT",
+            "PROXY",
+            "QUAKE",
+            "QUERY",
+            "RADIO",
+            "RIVER",
+            "SALAD",
+            "SHEEP",
+            "SHOES",
+            "SMILE",
+            "SNACK",
+            "SNAKE",
+            "SOLVE",
+            "SPICE",
+            "SPOON",
         ]
 
     if not all_words:
@@ -158,9 +263,7 @@ def main() -> None:
     # Determine word length from the first word and filter the list for consistency.
     word_length = len(all_words[0])
     # Also remove duplicates.
-    all_words = sorted(
-        list(set([w for w in all_words if len(w) == word_length]))
-    )
+    all_words = sorted(list(set([w for w in all_words if len(w) == word_length])))
 
     if len(all_words) < args.word_count:
         print(
@@ -173,14 +276,24 @@ def main() -> None:
     key = random.PRNGKey(args.seed)
 
     try:
-        run(
+        key1, key2 = random.split(key)
+        grid1 = grid_lines(
             width=args.width,
             height=args.height,
             word_count=args.word_count,
             word_length=word_length,
             all_words=all_words,
-            key=key,
+            key=key1,
         )
+        grid2 = grid_lines(
+            width=args.width,
+            height=args.height,
+            word_count=args.word_count,
+            word_length=word_length,
+            all_words=all_words,
+            key=key2,
+        )
+        print("\n".join(f"| {a} | {b} |" for a, b in zip(grid1, grid2)))
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
