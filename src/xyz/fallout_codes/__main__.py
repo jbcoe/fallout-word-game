@@ -8,12 +8,16 @@ import jax.numpy as jnp
 
 from xyz.fallout_codes.words import _SAMPLE_WORDS
 
+_NON_ALPHABETIC_CHARACTERS = jnp.array(
+    [ord(c) for c in "!@#$%^&*()_+-=[]{}|;':\",.<>/?`~"]
+)
+
 
 def non_alphabetic_characters(length: int, key: jax.Array) -> list[str]:
     """Returns a list of non-alphabetic character codes of the specified length."""
     ordinals = random.choice(
         key,
-        jnp.array([ord(c) for c in "!@#$%^&*()_+-=[]{}|;':\",.<>/?`~"]),
+        a=_NON_ALPHABETIC_CHARACTERS,
         shape=(length,),
         replace=True,
     ).tolist()
@@ -21,8 +25,8 @@ def non_alphabetic_characters(length: int, key: jax.Array) -> list[str]:
 
 
 def build_grid_text(length: int, words: list[str], key: jax.Array) -> list[str]:
-    key_text, key_words, key_place = random.split(key, 3)
-    text = non_alphabetic_characters(length, key_text)
+    text_key, key_words, place_key = random.split(key, 3)
+    text = non_alphabetic_characters(length, text_key)
 
     # This algorithm works by defining `word_count + 1` blocks of padding
     # (before, between, and after words). The total space not used by words is
@@ -42,7 +46,7 @@ def build_grid_text(length: int, words: list[str], key: jax.Array) -> list[str]:
         )
 
     # 2. Randomly distribute extra padding among the (word_count + 1) blocks.
-    key, subkey = random.split(key_place)
+    key, subkey = random.split(place_key)
     partitions = jnp.sort(
         random.randint(subkey, shape=(len(words),), minval=0, maxval=extra_padding + 1)
     )
@@ -79,8 +83,7 @@ def build_grid_lines(
     key: jax.Array,
 ) -> list[str]:
     """Builds a grid of words and non-alphabetic characters."""
-    key_text, key_place = random.split(key, 2)
-    text = build_grid_text(width * height, words=words, key=key_text)
+    text = build_grid_text(width * height, words=words, key=key)
 
     # Split the text into lines of the specified width.
     lines = ["".join(text[i : i + width]) for i in range(0, len(text), width)]
@@ -127,6 +130,15 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.word_length <= 0:
+        raise ValueError("Error: Word length must be a positive integer.")
+
+    if args.grid_count <= 0:
+        raise ValueError("Error: Grid count must be a positive integer.")
+
+    if args.word_count <= 0:
+        raise ValueError("Error: Word count must be a positive integer.")
+
     if args.word_file:
         with open(args.word_file, "r") as f:
             all_words = [line.strip().upper() for line in f if line.strip()]
@@ -135,15 +147,6 @@ def main() -> None:
 
     if not all_words:
         raise ValueError("Error: Word list is empty.")
-
-    if args.grid_count <= 0:
-        raise ValueError("Error: Grid count must be a positive integer.")
-
-    if args.word_count <= 0:
-        raise ValueError("Error: Word count must be a positive integer.")
-
-    if args.word_length <= 0:
-        raise ValueError("Error: Word length must be a positive integer.")
 
     # Determine word length from the first word and filter the list for consistency.
     # Also remove duplicates.
@@ -157,10 +160,10 @@ def main() -> None:
 
     key = random.PRNGKey(args.seed)
 
-    key_words, *grid_keys = random.split(key, args.grid_count + 1)
+    words_key, *grid_keys = random.split(key, args.grid_count + 1)
     # 0. Randomly select `word_count` words from the list without replacement.
     chosen_word_indices = random.choice(
-        key_words,
+        words_key,
         jnp.arange(len(all_words)),
         shape=(args.grid_count * args.word_count,),
         replace=False,
