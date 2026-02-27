@@ -21,7 +21,7 @@ def non_alphabetic_characters(length: int, key: jax.Array) -> list[str]:
     return [chr(c) for c in ordinals]
 
 
-def grid_text(length: int, words: list[str], key: jax.Array) -> list[str]:
+def build_grid_text(length: int, words: list[str], key: jax.Array) -> list[str]:
     key_text, key_words, key_place = random.split(key, 3)
     text = non_alphabetic_characters(length, key_text)
 
@@ -73,7 +73,7 @@ def grid_text(length: int, words: list[str], key: jax.Array) -> list[str]:
     return text
 
 
-def grid_lines(
+def build_grid_lines(
     width: int,
     height: int,
     words: list[str],
@@ -81,7 +81,7 @@ def grid_lines(
 ) -> list[str]:
     """Builds a grid of words and non-alphabetic characters."""
     key_text, key_place = random.split(key, 2)
-    text = grid_text(width * height, words=words, key=key_text)
+    text = build_grid_text(width * height, words=words, key=key_text)
 
     # Split the text into lines of the specified width.
     lines = ["".join(text[i : i + width]) for i in range(0, len(text), width)]
@@ -107,6 +107,12 @@ def main() -> None:
         type=int,
         default=8,
         help="Number of words to place on the grid.",
+    )
+    parser.add_argument(
+        "--grid-count",
+        type=int,
+        default=2,
+        help="Number of grids to generate (default is 2).",
     )
     parser.add_argument(
         "--width", type=int, default=12, help="Width of the character grid."
@@ -258,32 +264,33 @@ def main() -> None:
 
     key = random.PRNGKey(args.seed)
 
-    try:
-        key1, key2, key_words = random.split(key, 3)
-        # 0. Randomly select `word_count` words from the list without replacement.
-        chosen_word_indices = random.choice(
-            key_words,
-            jnp.arange(len(all_words)),
-            shape=(2 * args.word_count,),
-            replace=False,
-        )
-        chosen_words = [all_words[i] for i in chosen_word_indices]
-        grid1 = grid_lines(
+    # try:
+    key_words, *grid_keys = random.split(key, args.grid_count + 1)
+    # 0. Randomly select `word_count` words from the list without replacement.
+    chosen_word_indices = random.choice(
+        key_words,
+        jnp.arange(len(all_words)),
+        shape=(args.grid_count * args.word_count,),
+        replace=False,
+    )
+    chosen_words = [all_words[i] for i in chosen_word_indices]
+
+    grids: list[list[str]] = []
+    for i, grid_key in enumerate(grid_keys):
+        grid = build_grid_lines(
             width=args.width,
             height=args.height,
-            words=chosen_words[::2],
-            key=key1,
+            words=chosen_words[i::args.grid_count],
+            key=grid_key,
         )
-        grid2 = grid_lines(
-            width=args.width,
-            height=args.height,
-            words=chosen_words[1::2],
-            key=key2,
-        )
-        print("\n".join(f"| {a} | {b} |" for a, b in zip(grid1, grid2)))
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+        grids.append(grid)
+    screen_lines = []
+    for grid_lines in zip(*grids):
+        screen_lines.append(" | ".join(grid_lines))
+    print("\n".join(f"| {line} |" for line in screen_lines))
+    # except ValueError as e:
+    #     print(f"Error: {e}", file=sys.stderr)
+    #     sys.exit(1)
 
 
 if __name__ == "__main__":
