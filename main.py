@@ -1,13 +1,125 @@
 """The entry point for the fallout-codes package."""
 
-from jax.lax import le
-
 import argparse
-import sys
 import jax
 
 from jax import random
 import jax.numpy as jnp
+
+_SAMPLE_WORDS = [
+    "ABOUT",
+    "ABOVE",
+    "ABUSE",
+    "ACTOR",
+    "ACUTE",
+    "ADMIT",
+    "ADOPT",
+    "ADULT",
+    "AFTER",
+    "AGAIN",
+    "AGENT",
+    "AGREE",
+    "AHEAD",
+    "ALARM",
+    "ALBUM",
+    "ALERT",
+    "ALIKE",
+    "ALIVE",
+    "ALLOW",
+    "ALONE",
+    "ALONG",
+    "ALTER",
+    "AMONG",
+    "ANGER",
+    "ANGLE",
+    "ANGRY",
+    "APART",
+    "APPLE",
+    "APPLY",
+    "ARENA",
+    "ARGUE",
+    "ARISE",
+    "ARRAY",
+    "ASIDE",
+    "ASSET",
+    "AUDIO",
+    "AUDIT",
+    "AVOID",
+    "AWARD",
+    "AWARE",
+    "BADLY",
+    "BAKER",
+    "BASES",
+    "BASIC",
+    "BASIS",
+    "BEACH",
+    "BEGAN",
+    "BEGIN",
+    "BEGUN",
+    "BEING",
+    "BELOW",
+    "BENCH",
+    "BILLY",
+    "BIRTH",
+    "BLACK",
+    "BLAME",
+    "BLIND",
+    "BLOCK",
+    "BLOOD",
+    "BOARD",
+    "BRAIN",
+    "BREAD",
+    "BRUSH",
+    "CHAIR",
+    "CHARM",
+    "CHEST",
+    "CHORD",
+    "CLICK",
+    "CLOCK",
+    "CLOUD",
+    "CODES",
+    "DANCE",
+    "DEBUG",
+    "DIARY",
+    "DRINK",
+    "EARTH",
+    "FLUTE",
+    "FRUIT",
+    "GHOST",
+    "GRAPE",
+    "GREEN",
+    "HAPPY",
+    "HEART",
+    "HOUSE",
+    "INDEX",
+    "INPUT",
+    "JAXON",
+    "JUICE",
+    "LIGHT",
+    "LOGIC",
+    "MACRO",
+    "MONEY",
+    "MUSIC",
+    "OTHER",
+    "PARTY",
+    "PIXEL",
+    "PIZZA",
+    "PLANT",
+    "PROXY",
+    "QUAKE",
+    "QUERY",
+    "RADIO",
+    "RIVER",
+    "SALAD",
+    "SHEEP",
+    "SHOES",
+    "SMILE",
+    "SNACK",
+    "SNAKE",
+    "SOLVE",
+    "SPICE",
+    "SPOON",
+]
 
 
 def non_alphabetic_characters(length: int, key: jax.Array) -> list[str]:
@@ -109,6 +221,12 @@ def main() -> None:
         help="Number of words to place on the grid.",
     )
     parser.add_argument(
+        "--word-length",
+        type=int,
+        default=5,
+        help="Length of each word to place on the grid.",
+    )
+    parser.add_argument(
         "--grid-count",
         type=int,
         default=2,
@@ -123,148 +241,35 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.word_file:
-        try:
-            with open(args.word_file, "r") as f:
-                all_words = [line.strip().upper() for line in f if line.strip()]
-        except FileNotFoundError:
-            print(f"Error: Word file not found at {args.word_file}", file=sys.stderr)
-            sys.exit(1)
+        with open(args.word_file, "r") as f:
+            all_words = [line.strip().upper() for line in f if line.strip()]
     else:
-        all_words = [
-            "ABOUT",
-            "ABOVE",
-            "ABUSE",
-            "ACTOR",
-            "ACUTE",
-            "ADMIT",
-            "ADOPT",
-            "ADULT",
-            "AFTER",
-            "AGAIN",
-            "AGENT",
-            "AGREE",
-            "AHEAD",
-            "ALARM",
-            "ALBUM",
-            "ALERT",
-            "ALIKE",
-            "ALIVE",
-            "ALLOW",
-            "ALONE",
-            "ALONG",
-            "ALTER",
-            "AMONG",
-            "ANGER",
-            "ANGLE",
-            "ANGRY",
-            "APART",
-            "APPLE",
-            "APPLY",
-            "ARENA",
-            "ARGUE",
-            "ARISE",
-            "ARRAY",
-            "ASIDE",
-            "ASSET",
-            "AUDIO",
-            "AUDIT",
-            "AVOID",
-            "AWARD",
-            "AWARE",
-            "BADLY",
-            "BAKER",
-            "BASES",
-            "BASIC",
-            "BASIS",
-            "BEACH",
-            "BEGAN",
-            "BEGIN",
-            "BEGUN",
-            "BEING",
-            "BELOW",
-            "BENCH",
-            "BILLY",
-            "BIRTH",
-            "BLACK",
-            "BLAME",
-            "BLIND",
-            "BLOCK",
-            "BLOOD",
-            "BOARD",
-            "BRAIN",
-            "BREAD",
-            "BRUSH",
-            "CHAIR",
-            "CHARM",
-            "CHEST",
-            "CHORD",
-            "CLICK",
-            "CLOCK",
-            "CLOUD",
-            "CODES",
-            "DANCE",
-            "DEBUG",
-            "DIARY",
-            "DRINK",
-            "EARTH",
-            "FLUTE",
-            "FRUIT",
-            "GHOST",
-            "GRAPE",
-            "GREEN",
-            "HAPPY",
-            "HEART",
-            "HOUSE",
-            "INDEX",
-            "INPUT",
-            "JAXON",
-            "JUICE",
-            "LIGHT",
-            "LOGIC",
-            "MACRO",
-            "MONEY",
-            "MUSIC",
-            "OTHER",
-            "PARTY",
-            "PIXEL",
-            "PIZZA",
-            "PLANT",
-            "PROXY",
-            "QUAKE",
-            "QUERY",
-            "RADIO",
-            "RIVER",
-            "SALAD",
-            "SHEEP",
-            "SHOES",
-            "SMILE",
-            "SNACK",
-            "SNAKE",
-            "SOLVE",
-            "SPICE",
-            "SPOON",
-        ]
+        all_words = _SAMPLE_WORDS
 
     if not all_words:
-        print("Error: Word list is empty.", file=sys.stderr)
-        sys.exit(1)
+        raise ValueError("Error: Word list is empty.")
+
+    if args.grid_count <= 0:
+        raise ValueError("Error: Grid count must be a positive integer.")
+
+    if args.word_count <= 0:
+        raise ValueError("Error: Word count must be a positive integer.")
+
+    if args.word_length <= 0:
+        raise ValueError("Error: Word length must be a positive integer.")
 
     # Determine word length from the first word and filter the list for consistency.
-    word_length = len(all_words[0])
     # Also remove duplicates.
-    all_words = sorted(list(set([w for w in all_words if len(w) == word_length])))
+    all_words = sorted(list(set([w for w in all_words if len(w) == args.word_length])))
 
-    if len(all_words) < args.word_count:
-        print(
-            f"Error: Not enough unique words of length {word_length} available. "
-            f"Found {len(all_words)}, but need {args.word_count}.",
-            file=sys.stderr,
+    if len(all_words) < args.word_count * args.grid_count:
+        raise ValueError(
+            f"Error: Not enough unique words of length {args.word_length} available. "
+            f"Found {len(all_words)}, but need {args.word_count * args.grid_count}."
         )
-        sys.exit(1)
 
     key = random.PRNGKey(args.seed)
 
-    # try:
     key_words, *grid_keys = random.split(key, args.grid_count + 1)
     # 0. Randomly select `word_count` words from the list without replacement.
     chosen_word_indices = random.choice(
@@ -280,7 +285,7 @@ def main() -> None:
         grid = build_grid_lines(
             width=args.width,
             height=args.height,
-            words=chosen_words[i::args.grid_count],
+            words=chosen_words[i :: args.grid_count],
             key=grid_key,
         )
         grids.append(grid)
@@ -288,9 +293,6 @@ def main() -> None:
     for grid_lines in zip(*grids):
         screen_lines.append(" | ".join(grid_lines))
     print("\n".join(f"| {line} |" for line in screen_lines))
-    # except ValueError as e:
-    #     print(f"Error: {e}", file=sys.stderr)
-    #     sys.exit(1)
 
 
 if __name__ == "__main__":
