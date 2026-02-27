@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fallout_codes"
 version = "0.1.0"
-description = "Add your description here"
+description = "A Python game based on the Fallout terminal hacking minigame"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
