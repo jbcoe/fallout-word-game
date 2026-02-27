@@ -21,11 +21,6 @@ def non_alphabetic_characters(length: int, key: jax.Array) -> list[str]:
     return [chr(c) for c in ordinals]
 
 
-def split_into_lines(text: list[str], width: int) -> list[str]:
-    """Splits the text into lines of the specified width."""
-    return ["".join(text[i : i + width]) for i in range(0, len(text), width)]
-
-
 def grid_text(length: int, words: list[str], key: jax.Array) -> list[str]:
     key_text, key_words, key_place = random.split(key, 3)
     text = non_alphabetic_characters(length, key_text)
@@ -81,28 +76,16 @@ def grid_text(length: int, words: list[str], key: jax.Array) -> list[str]:
 def grid_lines(
     width: int,
     height: int,
-    word_count: int,
-    word_length: int,
-    all_words: list[str],
+    words: list[str],
     key: jax.Array,
 ) -> list[str]:
     """Builds a grid of words and non-alphabetic characters."""
-    key_text, key_words, key_place = random.split(key, 3)
-
-    # 0. Randomly select `word_count` words from the list without replacement.
-    chosen_word_indices = random.choice(
-        key_words, jnp.arange(len(all_words)), shape=(word_count,), replace=False
-    )
-    chosen_words = [all_words[i] for i in chosen_word_indices]
-
-    text = grid_text(width * height, chosen_words, key_text)
+    key_text, key_place = random.split(key, 2)
+    text = grid_text(width * height, words=words, key=key_text)
 
     # Split the text into lines of the specified width.
-    lines = split_into_lines(text, width)
-
+    lines = ["".join(text[i : i + width]) for i in range(0, len(text), width)]
     return lines
-    # Print the lines.
-    # print("\n".join(f"| {a} | {b} |" for a, b in zip(lines_a, lines_a)))
 
 
 def main() -> None:
@@ -276,21 +259,25 @@ def main() -> None:
     key = random.PRNGKey(args.seed)
 
     try:
-        key1, key2 = random.split(key)
+        key1, key2, key_words = random.split(key, 3)
+        # 0. Randomly select `word_count` words from the list without replacement.
+        chosen_word_indices = random.choice(
+            key_words,
+            jnp.arange(len(all_words)),
+            shape=(2 * args.word_count,),
+            replace=False,
+        )
+        chosen_words = [all_words[i] for i in chosen_word_indices]
         grid1 = grid_lines(
             width=args.width,
             height=args.height,
-            word_count=args.word_count,
-            word_length=word_length,
-            all_words=all_words,
+            words=chosen_words[::2],
             key=key1,
         )
         grid2 = grid_lines(
             width=args.width,
             height=args.height,
-            word_count=args.word_count,
-            word_length=word_length,
-            all_words=all_words,
+            words=chosen_words[1::2],
             key=key2,
         )
         print("\n".join(f"| {a} | {b} |" for a, b in zip(grid1, grid2)))
