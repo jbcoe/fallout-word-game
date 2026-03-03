@@ -1,5 +1,7 @@
 """Tests for the game module."""
 
+import pytest
+
 from xyz.fallout_codes.game import Game, calculate_likeness
 
 
@@ -8,79 +10,8 @@ def test_calculate_likeness() -> None:
     assert calculate_likeness("ABCD", "ABCD") == 4
     assert calculate_likeness("ABCD", "ABCE") == 3
     assert calculate_likeness("ABCD", "EFGH") == 0
-    assert calculate_likeness("SCORPION", "VAMPIRE") == 0  # Different length, no match
+    assert calculate_likeness("SCORPION", "VAMPIRE") == 0
     assert calculate_likeness("SCORPION", "SCORPION") == 8
-    # "SARGIOAA" vs "SCORPION":
-    # S vs S (Match)
-    # A vs C
-    # R vs O
-    # G vs R
-    # I vs P
-    # O vs I
-    # A vs O
-
-
-def test_game_initialization() -> None:
-    """Test game initialization."""
-    game = Game(target_password="ABCD", candidate_words=["ABCD", "EFGH"])
-    assert game.attempts_left == 4
-    assert not game.is_game_over
-    assert not game.has_won
-    assert game.history == []
-
-
-def test_game_correct_guess() -> None:
-    """Test a correct guess."""
-    game = Game(target_password="ABCD", candidate_words=["ABCD", "EFGH"])
-    result = game.make_guess("ABCD")
-    assert result == "Correct."
-    assert game.has_won
-    assert game.is_game_over
-    assert game.history == [("ABCD", 4)]
-
-
-def test_game_incorrect_guess() -> None:
-    """Test an incorrect guess."""
-    game = Game(target_password="ABCD", candidate_words=["ABCD", "EFGH"])
-    result = game.make_guess("EFGH")
-    assert "Likeness=0" in result
-    assert not game.has_won
-    assert not game.is_game_over
-    assert game.attempts_left == 3
-    assert game.history == [("EFGH", 0)]
-
-
-def test_game_invalid_guess() -> None:
-    """Test a guess not in candidate list."""
-    game = Game(target_password="ABCD", candidate_words=["ABCD", "EFGH"])
-    result = game.make_guess("XYZW")
-    assert result == "Entry denied."
-    assert not game.has_won
-    assert not game.is_game_over
-    # Invalid guess should not consume an attempt
-    assert game.attempts_left == 4
-    assert game.history == []
-
-
-def test_game_over_attempts() -> None:
-    """Test running out of attempts."""
-    game = Game(
-        target_password="ABCD", candidate_words=["ABCD", "EFGH", "IJKL", "MNOP", "QRST"]
-    )
-
-    # 4 attempts allowed
-    game.make_guess("EFGH")  # 3 left
-    game.make_guess("IJKL")  # 2 left
-    game.make_guess("MNOP")  # 1 left
-    result = game.make_guess("QRST")  # 0 left
-
-    assert "Lockdown initiated" in result
-    assert not game.has_won
-    assert game.is_game_over
-    assert game.attempts_left == 0
-
-    # A vs N
-    # Only 1 match (S) at index 0
     assert calculate_likeness("SARGIOAA", "SCORPION") == 1
 
 
@@ -95,42 +26,73 @@ def test_game_initialization() -> None:
     assert game.history == []
 
 
-def test_game_invalid_guess() -> None:
-    """Test making an invalid guess (not in candidate list)."""
-    candidates = ["WORD1", "WORD2"]
-    game = Game(target_password="WORD1", candidate_words=candidates)
-    result = game.make_guess("INVALID")
-    assert result == "Entry denied."
-    assert game.attempts_left == 4  # No penalty
-    assert not game.is_game_over
+def test_game_init_raises_error_if_target_not_in_candidates() -> None:
+    """Test that ValueError is raised if target is not in candidates."""
+    with pytest.raises(
+        ValueError, match="Target password must be one of the candidate words."
+    ):
+        Game(target_password="INVALID", candidate_words=["WORD1", "WORD2"])
+
+
+def test_game_init_raises_error_if_attempts_is_not_positive() -> None:
+    """Test that ValueError is raised if attempts_left is not positive."""
+    with pytest.raises(ValueError, match="Attempts left must be a positive integer."):
+        Game(
+            target_password="WORD1", candidate_words=["WORD1", "WORD2"], attempts_left=0
+        )
 
 
 def test_game_correct_guess() -> None:
-    """Test making a correct guess."""
+    """Test a correct guess."""
     candidates = ["WORD1", "WORD2"]
     game = Game(target_password="WORD1", candidate_words=candidates)
     result = game.make_guess("WORD1")
     assert result == "Correct."
     assert game.has_won
     assert game.is_game_over
+    assert game.history == [("WORD1", 5)]
 
 
 def test_game_incorrect_guess() -> None:
-    """Test making an incorrect guess."""
+    """Test an incorrect guess."""
     candidates = ["WORD1", "WORD2"]
     game = Game(target_password="WORD1", candidate_words=candidates)
-    # WORD2 matches WORD1 in 4 chars: W, O, R, D. But wait, WORD1 vs WORD2?
-    # W-W, O-O, R-R, D-D, 1-2 (No).
-    # So likeness is 4.
     result = game.make_guess("WORD2")
     assert "Likeness=4" in result
-    assert game.attempts_left == 3
+    assert not game.has_won
     assert not game.is_game_over
+    assert game.attempts_left == 3
     assert game.history == [("WORD2", 4)]
 
 
-def test_game_over_attempts() -> None:
-    """Test losing the game by running out of attempts."""
+def test_game_invalid_guess() -> None:
+    """Test a guess not in candidate list."""
+    game = Game(target_password="ABCD", candidate_words=["ABCD", "EFGH"])
+    result = game.make_guess("XYZW")
+    assert result == "Entry denied."
+    assert not game.has_won
+    assert not game.is_game_over
+    assert game.attempts_left == 4
+    assert game.history == []
+
+
+def test_game_over_after_exhausting_attempts() -> None:
+    """Test running out of attempts."""
+    game = Game(
+        target_password="ABCD", candidate_words=["ABCD", "EFGH", "IJKL", "MNOP", "QRST"]
+    )
+    game.make_guess("EFGH")
+    game.make_guess("IJKL")
+    game.make_guess("MNOP")
+    result = game.make_guess("QRST")
+    assert "Lockdown initiated" in result
+    assert not game.has_won
+    assert game.is_game_over
+    assert game.attempts_left == 0
+
+
+def test_game_over_when_starting_with_one_attempt() -> None:
+    """Test losing the game when starting with only one attempt."""
     candidates = ["WORD1", "WORD2"]
     game = Game(target_password="WORD1", candidate_words=candidates, attempts_left=1)
     result = game.make_guess("WORD2")

@@ -101,11 +101,11 @@ def setup_game(args: argparse.Namespace) -> tuple[Game, list[str]]:
         shape=(required_word_count,),
         replace=False,
     )
-    chosen_words = [filtered_words[i] for i in chosen_word_indices]
+    chosen_words = [filtered_words[int(i)] for i in chosen_word_indices]
 
     # Select one word as the target
     target_idx = random.randint(target_key, (), 0, len(chosen_words))
-    target_password = chosen_words[target_idx]
+    target_password = chosen_words[int(target_idx)]
 
     grids: list[list[str]] = []
     for i, grid_key in enumerate(grid_keys):

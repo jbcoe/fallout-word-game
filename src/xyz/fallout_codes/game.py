@@ -19,10 +19,9 @@ class Game:
         self.candidate_words = [w.upper() for w in self.candidate_words]
         self.target_password = self.target_password.upper()
         if self.target_password not in self.candidate_words:
-            # It's possible the game logic allows the target to be secret, but in this
-            # minigame style, the target is usually one of the displayed options.
-            # We will allow it but maybe warn or just proceed.
-            pass
+            raise ValueError("Target password must be one of the candidate words.")
+        if self.attempts_left <= 0:
+            raise ValueError("Attempts left must be a positive integer.")
 
     def make_guess(self, word: str) -> str:
         """Process a user's guess."""
