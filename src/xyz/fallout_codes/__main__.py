@@ -1,7 +1,6 @@
 """The entry point for the fallout-codes package."""
 
 import argparse
-import sys
 from jax import random
 import jax.numpy as jnp
 
@@ -68,12 +67,14 @@ def filter_words(all_words: list[str], word_length: int) -> list[str]:
 
 def setup_game(args: argparse.Namespace) -> tuple[Game, list[str]]:
     """Sets up the game context."""
+    if args.width <= 0:
+        raise ValueError("Error: Width must be a positive integer.")
+    if args.height <= 0:
+        raise ValueError("Error: Height must be a positive integer.")
     if args.word_length <= 0:
         raise ValueError("Error: Word length must be a positive integer.")
-
     if args.grid_count <= 0:
         raise ValueError("Error: Grid count must be a positive integer.")
-
     if args.word_count <= 0:
         raise ValueError("Error: Word count must be a positive integer.")
 
@@ -83,12 +84,10 @@ def setup_game(args: argparse.Namespace) -> tuple[Game, list[str]]:
 
     required_word_count = args.word_count * args.grid_count
     if len(filtered_words) < required_word_count:
-        print(
+        raise ValueError(
             f"Error: Not enough unique words of length {args.word_length} available. "
-            f"Found {len(filtered_words)}, but need {required_word_count}.",
-            file=sys.stderr,
+            f"Found {len(filtered_words)}, but need {required_word_count}."
         )
-        sys.exit(1)
 
     key = random.PRNGKey(args.seed)
 

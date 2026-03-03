@@ -100,3 +100,16 @@ def test_game_over_when_starting_with_one_attempt() -> None:
     assert game.attempts_left == 0
     assert game.is_game_over
     assert not game.has_won
+
+
+def test_make_guess_when_game_is_over() -> None:
+    """Test making a guess when the game is already over."""
+    game = Game(target_password="WORD1", candidate_words=["WORD1", "WORD2"])
+    game.is_game_over = True
+    initial_attempts = game.attempts_left
+    initial_history = list(game.history)
+
+    result = game.make_guess("WORD1")
+    assert result == "Game over."
+    assert game.attempts_left == initial_attempts
+    assert game.history == initial_history

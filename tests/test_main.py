@@ -26,7 +26,6 @@ def test_setup_game() -> None:
     assert game.target_password in game.candidate_words
 
     assert isinstance(screen_lines, list)
-    # 2 grids side by side with separator (width) + (width) + 3 (" | ")
-    # But wait, grid generation logic puts padding etc.
-    # Just check it's not empty and basic structure looks ok.
-    assert len(screen_lines) > 0
+    assert len(screen_lines) == args.height
+    for line in screen_lines:
+        assert " | " in line

@@ -15,10 +15,12 @@ The goal is to turn the current static grid display into an interactive terminal
 
 ## Architecture
 
-### 1. `Game` Class (New)
-A class to manage the game state.
+### 1. `game.py` Module
 
-**State:**
+#### `Game` Class
+A `@dataclass` to manage the game state.
+
+**State (Fields):**
 -   `target_password`: `str` - The correct word.
 -   `candidate_words`: `list[str]` - All valid words on the screen.
 -   `attempts_left`: `int` - Counter (starts at 4).
@@ -27,20 +29,20 @@ A class to manage the game state.
 -   `has_won`: `bool`.
 
 **Methods:**
--   `__init__(target: str, candidates: list[str], attempts: int = 4)`
--   `make_guess(word: str) -> str`:
+- `__post_init__()`: Validates that the target password is in the candidate list and that attempts are positive.
+- `make_guess(word: str) -> str`:
     -   Validates input (case-insensitive, must be in `candidate_words`).
-    -   Calculates likeness.
     -   Updates attempts and history.
-    -   Returns a feedback string (e.g., "Entry denied", "Likeness=2", "Correct").
+    -   Returns a feedback string (e.g., "Entry denied.", "Likeness=2.", "Correct.").
+
+#### `calculate_likeness` Function
 -   `calculate_likeness(word1: str, word2: str) -> int`:
-    -   Static/Utility method.
-    -   Counts matching characters at the same index.
+    -   A module-level utility function.
+    -   Counts matching characters at the same index between two strings.
 
 ### 2. Refactor `__main__.py`
--   Move grid generation logic into a setup function that returns the game context (the words and the rendered grid).
--   Implement the main game loop using the `Game` class.
--   Current `main()` only prints. Changed to `run_game()`.
+-   Grid generation and game initialization logic is handled in `setup_game()`, which returns a `Game` instance and the pre-rendered grid lines.
+-   The `main()` function implements the main game loop, taking user input and using the `Game` object to manage state.
 
 ### 3. Display Logic
 -   Retain the existing `grid.py` logic for visual flair.
