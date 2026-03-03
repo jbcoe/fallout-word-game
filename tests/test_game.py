@@ -5,14 +5,20 @@ import pytest
 from xyz.fallout_codes.game import Game, calculate_likeness
 
 
-def test_calculate_likeness() -> None:
+@pytest.mark.parametrize(
+    ("word1", "word2", "expected"),
+    [
+        ("ABCD", "ABCD", 4),
+        ("ABCD", "ABCE", 3),
+        ("ABCD", "EFGH", 0),
+        ("SCORPION", "VAMPIRE", 0),
+        ("SCORPION", "SCORPION", 8),
+        ("SARGIOAA", "SCORPION", 1),
+    ],
+)
+def test_calculate_likeness(word1: str, word2: str, expected: int) -> None:
     """Test the calculate_likeness function."""
-    assert calculate_likeness("ABCD", "ABCD") == 4
-    assert calculate_likeness("ABCD", "ABCE") == 3
-    assert calculate_likeness("ABCD", "EFGH") == 0
-    assert calculate_likeness("SCORPION", "VAMPIRE") == 0
-    assert calculate_likeness("SCORPION", "SCORPION") == 8
-    assert calculate_likeness("SARGIOAA", "SCORPION") == 1
+    assert calculate_likeness(word1, word2) == expected
 
 
 def test_game_initialization() -> None:
