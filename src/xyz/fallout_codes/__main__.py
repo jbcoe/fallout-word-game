@@ -135,7 +135,7 @@ def main() -> None:
     print("\n".join(f"| {line} |" for line in screen_lines))
 
     while not game.is_game_over:
-        print(f"\nAttempts remaining: {u'\u25a0' * game.attempts_left}")
+        print(f"\nAttempts remaining: {'\u25a0' * game.attempts_left}")
         try:
             guess = input("> ").strip()
         except EOFError:
