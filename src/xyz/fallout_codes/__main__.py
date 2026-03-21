@@ -1,6 +1,9 @@
 """The entry point for the fallout-codes package."""
 
 import argparse
+import logging
+import os
+from datetime import datetime
 from jax import random
 import jax.numpy as jnp
 
@@ -15,7 +18,10 @@ def parse_args() -> argparse.Namespace:
         description="Generate a Fallout-style code-breaking grid."
     )
     parser.add_argument(
-        "--seed", type=int, default=65, help="Seed for the random number generator."
+        "--seed",
+        type=int,
+        default=None,
+        help="Seed for the random number generator. If not provided, a seed is generated from the current time.",
     )
     parser.add_argument(
         "--word-file",
@@ -47,6 +53,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--height", type=int, default=16, help="Height of the character grid."
     )
+    parser.add_argument(
+        "--attempts",
+        type=int,
+        default=4,
+        help="Number of attempts to guess the password.",
+    )
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging.")
     return parser.parse_args()
 
 
@@ -77,6 +90,8 @@ def setup_game(args: argparse.Namespace) -> tuple[Game, list[str]]:
         raise ValueError("Error: Grid count must be a positive integer.")
     if args.word_count <= 0:
         raise ValueError("Error: Word count must be a positive integer.")
+    if args.attempts <= 0:
+        raise ValueError("Error: Attempts must be a positive integer.")
 
     all_words = load_words(args.word_file)
 
@@ -123,13 +138,31 @@ def setup_game(args: argparse.Namespace) -> tuple[Game, list[str]]:
     for grid_lines in zip(*grids):
         screen_lines.append(" | ".join(grid_lines))
 
-    game = Game(target_password=target_password, candidate_words=chosen_words)
+    game = Game(
+        target_password=target_password,
+        candidate_words=chosen_words,
+        attempts_left=args.attempts,
+    )
     return game, screen_lines
 
 
 def main() -> None:
     """Runs the main game loop."""
     args = parse_args()
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.debug else logging.INFO,
+        format="%(levelname)s: %(message)s",
+    )
+
+    if args.seed is None:
+        # Use a fixed seed when running inside a test, for reproducibility.
+        if "PYTEST_CURRENT_TEST" in os.environ:
+            args.seed = 42
+        else:
+            args.seed = int(datetime.now().timestamp() * 1_000_000)
+        logging.debug(f"Using generated seed: {args.seed}")
+
     game, screen_lines = setup_game(args)
 
     print("\n".join(f"| {line} |" for line in screen_lines))

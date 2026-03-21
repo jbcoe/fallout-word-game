@@ -1,6 +1,7 @@
 """Tests for the main module."""
 
 import argparse
+
 from xyz.fallout_codes.__main__ import setup_game
 from xyz.fallout_codes.game import Game
 
@@ -16,6 +17,7 @@ def test_setup_game() -> None:
         grid_count=2,
         width=12,
         height=16,
+        attempts=4,
     )
 
     game, screen_lines = setup_game(args)

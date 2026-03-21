@@ -1,5 +1,6 @@
 """Game logic for the Fallout-style code-breaking minigame."""
 
+import logging
 from dataclasses import dataclass, field
 
 
@@ -31,7 +32,7 @@ class Game:
             return "Game over."
 
         if word not in self.candidate_words:
-            return "Entry denied."  # Not a valid word choice
+            return "Not found."  # Not a valid word choice
 
         likeness = calculate_likeness(word, self.target_password)
         self.history.append((word, likeness))
@@ -51,9 +52,14 @@ class Game:
 
 def calculate_likeness(word1: str, word2: str) -> int:
     """Calculates the number of matching characters at the same index."""
+    logging.debug(f"Calculating likeness between '{word1}' and '{word2}'")
     count = 0
     # Words are assumed to be same length in this game, but let's be safe
-    for c1, c2 in zip(word1, word2):
+    for i, (c1, c2) in enumerate(zip(word1, word2)):
         if c1 == c2:
+            logging.debug(f"  Match at index {i}: '{c1}' == '{c2}'")
             count += 1
+        else:
+            logging.debug(f"  No match at index {i}: '{c1}' != '{c2}'")
+    logging.debug(f"Likeness score: {count}")
     return count

@@ -3,6 +3,8 @@
 import pytest
 
 from xyz.fallout_codes.game import Game, calculate_likeness
+from xyz.fallout_codes.__main__ import filter_words
+from xyz.fallout_codes.words import _SAMPLE_WORDS
 
 
 @pytest.mark.parametrize(
@@ -71,15 +73,42 @@ def test_game_incorrect_guess() -> None:
     assert game.history == [("WORD2", 4)]
 
 
+def test_likeness_calculation_in_game() -> None:
+    """Test that likeness is calculated correctly during a game."""
+    candidates = ["CATCHER", "BUTCHER", "TEACHER"]
+    game = Game(target_password="BUTCHER", candidate_words=candidates)
+
+    # Guess a word with known likeness
+    result = game.make_guess("TEACHER")
+    assert "Likeness=4" in result
+    assert game.history == [("TEACHER", 4)]
+
+    # Guess another word
+    result = game.make_guess("CATCHER")
+    assert "Likeness=5" in result
+    assert game.history == [("TEACHER", 4), ("CATCHER", 5)]
+
+
 def test_game_invalid_guess() -> None:
     """Test a guess not in candidate list."""
     game = Game(target_password="ABCD", candidate_words=["ABCD", "EFGH"])
     result = game.make_guess("XYZW")
-    assert result == "Entry denied."
+    assert result == "Not found."
     assert not game.has_won
     assert not game.is_game_over
     assert game.attempts_left == 4
     assert game.history == []
+
+
+def test_game_guess_is_case_insensitive() -> None:
+    """Test that a guess is handled case-insensitively."""
+    candidates = ["WORD1", "WORD2"]
+    game = Game(target_password="WORD1", candidate_words=candidates)
+    result = game.make_guess("word1")
+    assert result == "Correct."
+    assert game.has_won
+    assert game.is_game_over
+    assert game.history == [("WORD1", 5)]
 
 
 def test_game_over_after_exhausting_attempts() -> None:
@@ -119,3 +148,18 @@ def test_make_guess_when_game_is_over() -> None:
     assert result == "Game over."
     assert game.attempts_left == initial_attempts
     assert game.history == initial_history
+
+
+def test_likeness_with_real_words() -> None:
+    """Test likeness with a more realistic scenario."""
+    words = filter_words(_SAMPLE_WORDS, 5)
+    candidates = words[:10]
+    target = candidates[0]  # ABOUT
+    guess = candidates[1]  # ABOVE
+
+    game = Game(target_password=target, candidate_words=candidates)
+    likeness = calculate_likeness(guess, target)
+    assert likeness == 3
+
+    feedback = game.make_guess(guess)
+    assert f"Likeness={likeness}" in feedback
