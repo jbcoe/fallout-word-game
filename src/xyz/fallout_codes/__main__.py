@@ -1,12 +1,15 @@
 """The entry point for the fallout-codes package."""
 
 import argparse
-import sys
+import logging
+import os
+from datetime import datetime
 from jax import random
 import jax.numpy as jnp
 
 from xyz.fallout_codes.words import _SAMPLE_WORDS
 from xyz.fallout_codes.grid import build_grid_lines
+from xyz.fallout_codes.game import Game
 
 
 def parse_args() -> argparse.Namespace:
@@ -15,7 +18,10 @@ def parse_args() -> argparse.Namespace:
         description="Generate a Fallout-style code-breaking grid."
     )
     parser.add_argument(
-        "--seed", type=int, default=65, help="Seed for the random number generator."
+        "--seed",
+        type=int,
+        default=None,
+        help="Seed for the random number generator. If not provided, a seed is generated from the current time.",
     )
     parser.add_argument(
         "--word-file",
@@ -47,6 +53,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--height", type=int, default=16, help="Height of the character grid."
     )
+    parser.add_argument(
+        "--attempts",
+        type=int,
+        default=4,
+        help="Number of attempts to guess the password.",
+    )
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging.")
     return parser.parse_args()
 
 
@@ -65,18 +78,20 @@ def filter_words(all_words: list[str], word_length: int) -> list[str]:
     return sorted(list(set([w for w in all_words if len(w) == word_length])))
 
 
-def main() -> None:
-    """Runs the grid generator."""
-    args = parse_args()
-
+def setup_game(args: argparse.Namespace) -> tuple[Game, list[str]]:
+    """Sets up the game context."""
+    if args.width <= 0:
+        raise ValueError("Error: Width must be a positive integer.")
+    if args.height <= 0:
+        raise ValueError("Error: Height must be a positive integer.")
     if args.word_length <= 0:
         raise ValueError("Error: Word length must be a positive integer.")
-
     if args.grid_count <= 0:
         raise ValueError("Error: Grid count must be a positive integer.")
-
     if args.word_count <= 0:
         raise ValueError("Error: Word count must be a positive integer.")
+    if args.attempts <= 0:
+        raise ValueError("Error: Attempts must be a positive integer.")
 
     all_words = load_words(args.word_file)
 
@@ -84,16 +99,14 @@ def main() -> None:
 
     required_word_count = args.word_count * args.grid_count
     if len(filtered_words) < required_word_count:
-        print(
+        raise ValueError(
             f"Error: Not enough unique words of length {args.word_length} available. "
-            f"Found {len(filtered_words)}, but need {required_word_count}.",
-            file=sys.stderr,
+            f"Found {len(filtered_words)}, but need {required_word_count}."
         )
-        sys.exit(1)
 
     key = random.PRNGKey(args.seed)
 
-    words_key, *grid_keys = random.split(key, args.grid_count + 1)
+    words_key, target_key, *grid_keys = random.split(key, args.grid_count + 2)
 
     # Randomly select words without replacement
     chosen_word_indices = random.choice(
@@ -102,7 +115,11 @@ def main() -> None:
         shape=(required_word_count,),
         replace=False,
     )
-    chosen_words = [filtered_words[i] for i in chosen_word_indices]
+    chosen_words = [filtered_words[i] for i in chosen_word_indices.tolist()]
+
+    # Select one word as the target
+    target_idx = random.randint(target_key, (), 0, len(chosen_words))
+    target_password = chosen_words[int(target_idx)]
 
     grids: list[list[str]] = []
     for i, grid_key in enumerate(grid_keys):
@@ -120,7 +137,48 @@ def main() -> None:
     screen_lines = []
     for grid_lines in zip(*grids):
         screen_lines.append(" | ".join(grid_lines))
+
+    game = Game(
+        target_password=target_password,
+        candidate_words=chosen_words,
+        attempts_left=args.attempts,
+    )
+    return game, screen_lines
+
+
+def main() -> None:
+    """Runs the main game loop."""
+    args = parse_args()
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.debug else logging.INFO,
+        format="%(levelname)s: %(message)s",
+    )
+
+    if args.seed is None:
+        # Use a fixed seed when running inside a test, for reproducibility.
+        if "PYTEST_CURRENT_TEST" in os.environ:
+            args.seed = 42
+        else:
+            args.seed = int(datetime.now().timestamp() * 1_000_000)
+        logging.debug(f"Using generated seed: {args.seed}")
+
+    game, screen_lines = setup_game(args)
+
     print("\n".join(f"| {line} |" for line in screen_lines))
+
+    while not game.is_game_over:
+        print(f"\nAttempts remaining: {'\u25a0' * game.attempts_left}")
+        try:
+            guess = input("> ").strip()
+        except EOFError:
+            break
+
+        if not guess:
+            continue
+
+        feedback = game.make_guess(guess)
+        print(feedback)
 
 
 if __name__ == "__main__":
